@@ -1,5 +1,5 @@
-// Bump VERSION whenever you change any app file, so phones download the update.
-const VERSION = "v1";
+// Bump VERSION when adding or renaming files, so the offline cache is rebuilt.
+const VERSION = "v2";
 const CACHE = "workout-tracker-" + VERSION;
 const CORE = [
   "./",
@@ -33,18 +33,26 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Cache first, falling back to the network; navigation falls back to the cached shell offline.
+// Network first so pushed updates show up on the next launch; the cache is the offline fallback.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
 
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).catch(() => {
-        if (req.mode === "navigate") return caches.match("index.html");
-        return Response.error();
-      });
-    })
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req, { ignoreSearch: true }).then((cached) => {
+          if (cached) return cached;
+          if (req.mode === "navigate") return caches.match("index.html");
+          return Response.error();
+        })
+      )
   );
 });

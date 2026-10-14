@@ -9,8 +9,8 @@ function New-Icon([int]$size, [string]$path) {
   $bmp = New-Object System.Drawing.Bitmap $size, $size
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $g.Clear([System.Drawing.Color]::FromArgb(15, 17, 21))
-  $blue = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(79, 140, 255))
+  $g.Clear([System.Drawing.Color]::FromArgb(10, 10, 11))
+  $volt = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(212, 255, 0))
   $s = $size / 100.0
   # Same shapes as icons/icon.svg: x, y, width, height on a 100x100 grid.
   $rects = @(
@@ -21,10 +21,10 @@ function New-Icon([int]$size, [string]$path) {
     @(78, 36, 8, 28)
   )
   foreach ($r in $rects) {
-    $g.FillRectangle($blue, [single]($r[0] * $s), [single]($r[1] * $s), [single]($r[2] * $s), [single]($r[3] * $s))
+    $g.FillRectangle($volt, [single]($r[0] * $s), [single]($r[1] * $s), [single]($r[2] * $s), [single]($r[3] * $s))
   }
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-  $blue.Dispose(); $g.Dispose(); $bmp.Dispose()
+  $volt.Dispose(); $g.Dispose(); $bmp.Dispose()
 }
 
 New-Icon 180 (Join-Path $dir "apple-touch-icon.png")

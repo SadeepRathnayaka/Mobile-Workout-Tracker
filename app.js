@@ -71,6 +71,13 @@
     return n + " days ago";
   }
 
+  function shortAgo(iso) {
+    const label = daysAgo(iso);
+    if (label === "today") return "Today";
+    if (label === "yesterday") return "1d";
+    return label.replace(" days ago", "d");
+  }
+
   function convert(weight, fromUnit, toUnit) {
     if (weight == null || weight === "" || fromUnit === toUnit) return weight;
     const w = Number(weight);
@@ -163,26 +170,65 @@
 
   // ---------- Home ----------
 
+  const QUOTES = [
+    "No excuses. Just results.",
+    "Stronger than yesterday.",
+    "One more rep.",
+    "Earn it.",
+    "Light weight, baby!",
+    "The only bad workout is the one you skipped.",
+    "Beat your last numbers.",
+    "Discipline over motivation.",
+  ];
+
+  function startOfWeek() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+
   function renderHome() {
     setHeader("Workout", null);
     setBottomBar(null);
     const next = nextDayId();
+    const nextDay = findDay(next);
     const drafts = getDrafts();
+    const sessions = sortedSessions();
+    const weekStart = startOfWeek();
+    const thisWeek = sessions.filter((s) => new Date(s.date) >= weekStart).length;
+    const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
 
-    app.innerHTML = SCHEDULE.map((day) => {
+    const hero = `
+      <section class="hero">
+        <div class="hero-kicker">Up next</div>
+        <div class="hero-title">${esc(nextDay.focus)}</div>
+        <div class="hero-sub">${esc(quote)}</div>
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="num">${thisWeek}</div><div class="lbl">This week</div></div>
+          <div class="hero-stat"><div class="num">${sessions.length}</div><div class="lbl">Total</div></div>
+          <div class="hero-stat"><div class="num">${sessions.length ? shortAgo(sessions[0].date) : "-"}</div><div class="lbl">Last workout</div></div>
+        </div>
+      </section>
+      <div class="section-title">Your split</div>`;
+
+    app.innerHTML = hero + SCHEDULE.map((day, idx) => {
       const last = lastDoneDate(day.id);
       const isNext = day.id === next;
       return `
         <button class="card day-card ${isNext ? "next" : ""}" data-day="${day.id}">
-          <div class="day-name">${esc(day.name)}
-            ${isNext ? '<span class="badge">Next</span>' : ""}
-            ${drafts[day.id] ? '<span class="badge draft">In progress</span>' : ""}
+          <div class="day-num">${String(idx + 1).padStart(2, "0")}</div>
+          <div class="day-body">
+            <div class="day-name">${esc(day.focus)}
+              ${isNext ? '<span class="badge">Next</span>' : ""}
+              ${drafts[day.id] ? '<span class="badge draft">In progress</span>' : ""}
+            </div>
+            <div class="meta">
+              <span>${esc(day.name)} &middot; ${day.exercises.length} exercises</span>
+              <span>${last ? fmtDate(last) : "Not done yet"}</span>
+            </div>
           </div>
-          <div class="focus">${esc(day.focus)}</div>
-          <div class="meta">
-            <span>${day.exercises.length} exercises</span>
-            <span>${last ? "Last: " + fmtDate(last) + " (" + daysAgo(last) + ")" : "Not done yet"}</span>
-          </div>
+          <div class="chev">&#8250;</div>
         </button>`;
     }).join("");
 
@@ -267,17 +313,20 @@
     const draft = getDraft(day);
     const hasSavedDraft = !!getDrafts()[day.id];
 
-    setHeader(`${day.name} - ${day.focus}`, "#/");
+    setHeader(day.focus, "#/");
 
-    app.innerHTML = day.exercises.map((ex) => {
+    const isComplete = (exId) => draft.entries[exId].sets.every((s) => s.done);
+
+    app.innerHTML = day.exercises.map((ex, idx) => {
       const last = lastEntry(ex.id);
       const sets = draft.entries[ex.id].sets;
       return `
-        <section class="card" data-exercise="${ex.id}">
+        <section class="card ex-card ${isComplete(ex.id) ? "complete" : ""}" data-exercise="${ex.id}">
           <div class="ex-head">
             <div>
+              <div class="ex-index">${String(idx + 1).padStart(2, "0")} / ${String(day.exercises.length).padStart(2, "0")}</div>
               <h2 class="ex-name">${esc(ex.name)}</h2>
-              <div class="ex-target">Target: ${ex.reps.join(" / ")}</div>
+              <div class="ex-target">Target: <b>${ex.reps.join(" / ")}</b></div>
               ${ex.note ? `<div class="ex-note">${esc(ex.note)}</div>` : ""}
             </div>
             <button class="link-btn" data-history="${ex.id}">History</button>
@@ -295,8 +344,28 @@
       ${hasSavedDraft ? '<button class="btn danger" id="discardBtn">Discard this workout</button>' : ""}
     `;
 
-    const bar = setBottomBar('<button class="btn" id="finishBtn">Finish workout</button>');
-    bar.querySelector("#finishBtn").addEventListener("click", () => finishWorkout(day, draft));
+    const bar = setBottomBar(`
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <button class="btn" id="finishBtn">Finish workout</button>`);
+    const finishBtn = bar.querySelector("#finishBtn");
+    const progressFill = bar.querySelector("#progressFill");
+    finishBtn.addEventListener("click", () => finishWorkout(day, draft));
+
+    function updateProgress() {
+      let done = 0;
+      let total = 0;
+      for (const ex of day.exercises) {
+        for (const s of draft.entries[ex.id].sets) {
+          total++;
+          if (s.done) done++;
+        }
+        const card = app.querySelector(`[data-exercise="${ex.id}"]`);
+        if (card) card.classList.toggle("complete", isComplete(ex.id));
+      }
+      finishBtn.textContent = `Finish \u00b7 ${done}/${total} sets`;
+      progressFill.style.width = total ? (done / total) * 100 + "%" : "0%";
+    }
+    updateProgress();
 
     const discardBtn = document.getElementById("discardBtn");
     if (discardBtn) {
@@ -337,6 +406,7 @@
         set.done = !set.done;
         row.classList.toggle("done", set.done);
         persistDraft(draft);
+        updateProgress();
         return;
       }
 
@@ -352,6 +422,7 @@
       persistDraft(draft);
       const container = app.querySelector(`[data-exercise="${exId}"] .sets`);
       container.innerHTML = sets.map((s, i) => setRowHtml(exId, i, s, unit)).join("");
+      updateProgress();
     }
 
     cleanupDay = () => {
@@ -450,7 +521,7 @@
     app.innerHTML = `
       <div class="card">
         <div class="stats">
-          <div class="stat"><div class="label">Best set</div><div class="value">${fmtNum(best.weight)}${unit} x${best.reps}</div></div>
+          <div class="stat highlight"><div class="label">Best set</div><div class="value">${fmtNum(best.weight)}${unit} x${best.reps}</div></div>
           <div class="stat"><div class="label">Last top weight</div><div class="value">${fmtNum(latestTop)}${unit}</div></div>
           <div class="stat"><div class="label">Est. 1 rep max</div><div class="value">${fmtNum(Math.round(bestE1rm * 10) / 10)}${unit}</div></div>
           <div class="stat"><div class="label">Sessions</div><div class="value">${history.length}</div></div>
@@ -479,7 +550,7 @@
     const ctx = canvas.getContext("2d");
     ctx.scale(dpr, dpr);
 
-    const pad = { l: 40, r: 12, t: 12, b: 26 };
+    const pad = { l: 40, r: 12, t: 22, b: 26 };
     const values = points.map((p) => p.value);
     let min = Math.min(...values);
     let max = Math.max(...values);
@@ -494,8 +565,8 @@
     const y = (v) => pad.t + (1 - (v - min) / (max - min)) * (h - pad.t - pad.b);
 
     ctx.font = "11px -apple-system, sans-serif";
-    ctx.fillStyle = "#9aa3b2";
-    ctx.strokeStyle = "#2c3140";
+    ctx.fillStyle = "#8d8d96";
+    ctx.strokeStyle = "#2a2a30";
     ctx.lineWidth = 1;
     for (let i = 0; i <= 3; i++) {
       const v = min + ((max - min) * i) / 3;
@@ -509,28 +580,50 @@
       ctx.fillText(fmtNum(Math.round(v * 10) / 10), pad.l - 6, yy);
     }
 
-    ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const labelIdx = points.length <= 2 ? points.map((_, i) => i) : [0, points.length - 1];
+    const last = points.length - 1;
+    const labelIdx = last === 0 ? [0] : [0, last];
     for (const i of labelIdx) {
-      ctx.fillText(fmtDate(points[i].date), x(i), h - pad.b + 8);
+      ctx.textAlign = last === 0 ? "center" : i === 0 ? "left" : "right";
+      const lx = last === 0 ? x(i) : i === 0 ? pad.l : w - pad.r;
+      ctx.fillText(fmtDate(points[i].date), lx, h - pad.b + 8);
     }
 
-    ctx.strokeStyle = "#4f8cff";
-    ctx.lineWidth = 2.5;
+    if (points.length > 1) {
+      const grad = ctx.createLinearGradient(0, pad.t, 0, h - pad.b);
+      grad.addColorStop(0, "rgba(212, 255, 0, 0.35)");
+      grad.addColorStop(1, "rgba(212, 255, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(x(0), h - pad.b);
+      points.forEach((p, i) => ctx.lineTo(x(i), y(p.value)));
+      ctx.lineTo(x(points.length - 1), h - pad.b);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = "#d4ff00";
+    ctx.lineWidth = 3;
     ctx.lineJoin = "round";
+    ctx.shadowColor = "rgba(212, 255, 0, 0.6)";
+    ctx.shadowBlur = 8;
     ctx.beginPath();
     points.forEach((p, i) => (i ? ctx.lineTo(x(i), y(p.value)) : ctx.moveTo(x(i), y(p.value))));
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    ctx.fillStyle = "#4f8cff";
     points.forEach((p, i) => {
+      ctx.fillStyle = "#0a0a0b";
+      ctx.beginPath();
+      ctx.arc(x(i), y(p.value), 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#d4ff00";
       ctx.beginPath();
       ctx.arc(x(i), y(p.value), 3.5, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    ctx.fillStyle = "#9aa3b2";
+    ctx.fillStyle = "#8d8d96";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(unit, 4, 2);
@@ -685,9 +778,9 @@
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#0f1115";
+      ctx.fillStyle = "#0a0a0b";
       ctx.fillRect(0, 0, size, size);
-      ctx.fillStyle = "#4f8cff";
+      ctx.fillStyle = "#d4ff00";
       [[22, 46, 56, 8], [24, 28, 10, 44], [66, 28, 10, 44], [14, 36, 8, 28], [78, 36, 8, 28]]
         .forEach(([x, y, w, h]) => ctx.fillRect(x * s, y * s, w * s, h * s));
       link.href = canvas.toDataURL("image/png");
