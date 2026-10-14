@@ -280,6 +280,21 @@ main {
   white-space: nowrap;
 }
 .link-btn:active { border-color: var(--volt); color: var(--volt); }
+.link-btn.yt { color: #ff3b3b; border-color: rgba(255, 59, 59, 0.4); }
+.link-btn.yt:active { border-color: #ff3b3b; color: #ff3b3b; background: rgba(255, 59, 59, 0.12); }
+
+a.link-btn,
+a.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
+.btn.secondary.yt-btn { color: #ff3b3b; border-color: rgba(255, 59, 59, 0.4); margin-bottom: 12px; }
+
+.ex-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 
 .set-row {
   display: grid;

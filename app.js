@@ -101,6 +101,11 @@
     return SCHEDULE.find((d) => d.id === dayId);
   }
 
+  function formVideoUrl(ex) {
+    const q = (ex.search || ex.name) + " proper form";
+    return "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+  }
+
   function findExercise(exId) {
     for (const day of SCHEDULE) {
       const ex = day.exercises.find((e) => e.id === exId);
@@ -329,7 +334,10 @@
               <div class="ex-target">Target: <b>${ex.reps.join(" / ")}</b></div>
               ${ex.note ? `<div class="ex-note">${esc(ex.note)}</div>` : ""}
             </div>
-            <button class="link-btn" data-history="${ex.id}">History</button>
+            <div class="ex-actions">
+              <a class="link-btn yt" href="${esc(formVideoUrl(ex))}" target="_blank" rel="noopener">&#9654; Form</a>
+              <button class="link-btn" data-history="${ex.id}">History</button>
+            </div>
           </div>
           <div class="ex-last">${last
             ? `Last (${fmtDate(last.date)}): <b>${esc(setsSummary(last.sets, unit))}</b>`
@@ -493,12 +501,15 @@
       })
       .filter(Boolean);
 
+    const formLink = `<a class="btn secondary yt-btn" href="${esc(formVideoUrl(ex))}" target="_blank" rel="noopener">&#9654; Watch form</a>`;
+
     if (!history.length) {
       app.innerHTML = `
         <div class="card">
           <div class="ex-target">Target: ${ex.reps.join(" / ")}</div>
           <div class="empty">No sessions logged yet.</div>
-        </div>`;
+        </div>
+        ${formLink}`;
       return;
     }
 
@@ -527,6 +538,7 @@
           <div class="stat"><div class="label">Sessions</div><div class="value">${history.length}</div></div>
         </div>
       </div>
+      ${formLink}
       <div class="section-title">Top weight per session</div>
       <div class="card"><canvas class="chart" id="chart"></canvas></div>
       <div class="section-title">Sessions</div>

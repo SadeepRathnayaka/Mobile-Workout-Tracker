@@ -25,6 +25,7 @@ Each exercise card shows:
 
 - the **target** reps for each set, for example `12 / 10 / 10 / 8`
 - **Last**: the weight and reps you did in your previous session
+- **Form**: opens YouTube search results showing how to do the exercise properly (in the YouTube app if it's installed). Your entered sets stay saved while you watch.
 
 The set rows are pre-filled with last session's weights and today's target reps.
 
@@ -45,6 +46,8 @@ Tap **History** on any exercise to see:
 - the number of sessions you've logged
 - a chart of your top weight in each session
 - every past session with all its sets
+
+The History screen also has a **Watch form** button that opens the same YouTube search.
 
 ## Settings
 
