@@ -67,6 +67,7 @@ body {
 .btn {
   font-family: var(--display);
   font-style: italic;
+  text-transform: uppercase;
 }
 
 /* ---------- Top bar ---------- */
