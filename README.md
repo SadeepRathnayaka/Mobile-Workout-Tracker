@@ -23,8 +23,8 @@ Data saved in the home-screen app is kept separately from a regular Safari tab, 
 
 Each exercise card shows:
 
-- the **target** reps for each set, for example `12 / 10 / 10 / 8`
-- **Last**: the weight and reps you did in your previous session
+- the **target** reps for each set, for example `12 · 10 · 10 · 8`, and the date you last did it
+- a set table with columns **Set**, **Previous** (what you lifted for that set last time), weight, **Reps**, and a check mark
 - **Form**: opens YouTube search results showing how to do the exercise properly (in the YouTube app if it's installed). Your entered sets stay saved while you watch.
 
 The set rows are pre-filled with last session's weights and today's target reps.
@@ -49,13 +49,31 @@ Tap **History** on any exercise to see:
 
 The History screen also has a **Watch form** button that opens the same YouTube search.
 
+## Customising your routine
+
+Open the editor with **Edit exercises** at the top of a day's workout screen, or from **Settings > Routine > Edit**. For each exercise you can:
+
+- **rename** it
+- change its **target reps**, separated by commas (for example `12, 10, 10, 8`); the number of values sets how many sets you do
+- **move** it up or down
+- **delete** it
+
+Tap **+ Add exercise** to add a new one, then **Save exercises**. Going back without saving discards your changes.
+
+- Renaming keeps the exercise's history, best set and Previous column.
+- Deleting an exercise removes it from the day, but its past history stays saved.
+- The **Form** button always searches YouTube for the exercise's current name.
+- Changed target reps apply from the next workout; a workout you've already started keeps its sets.
+- **Settings > Routine > Reset to default routine** brings back the original exercises. Your history isn't affected.
+
 ## Settings
 
 Tap the gear icon to:
 
 - switch between **kg** and **lb**. Weights you already saved are converted for display.
-- **Export backup**: opens the share sheet, so you can save a backup file to Files or iCloud Drive.
-- **Import backup**: restores from a backup file. It merges with what's already saved and skips duplicates.
+- edit each day's exercises, or reset the routine (see above).
+- **Export backup**: opens the share sheet, so you can save a backup file to Files or iCloud Drive. It includes your edited routine.
+- **Import backup**: restores from a backup file. It merges with what's already saved and skips duplicates, and offers to restore the routine too.
 - **Delete all workout data**.
 
 ## Backups

@@ -5,6 +5,7 @@
     data: "wt.data",
     drafts: "wt.drafts",
     settings: "wt.settings",
+    schedule: "wt.schedule",
   };
   const KG_PER_LB = 0.45359237;
 
@@ -40,6 +41,13 @@
   function setDrafts(drafts) { save(KEYS.drafts, drafts); }
   function getSettings() { return Object.assign({ unit: "kg" }, load(KEYS.settings, {})); }
   function setSettings(s) { save(KEYS.settings, s); }
+
+  // The routine you edited in the app, or the defaults from schedule.js.
+  function getSchedule() {
+    const stored = load(KEYS.schedule, null);
+    return Array.isArray(stored) && stored.length ? stored : JSON.parse(JSON.stringify(SCHEDULE));
+  }
+  function setSchedule(s) { save(KEYS.schedule, s); }
 
   // ---------- Helpers ----------
 
@@ -98,7 +106,7 @@
   }
 
   function findDay(dayId) {
-    return SCHEDULE.find((d) => d.id === dayId);
+    return getSchedule().find((d) => d.id === dayId);
   }
 
   function formVideoUrl(ex) {
@@ -107,7 +115,7 @@
   }
 
   function findExercise(exId) {
-    for (const day of SCHEDULE) {
+    for (const day of getSchedule()) {
       const ex = day.exercises.find((e) => e.id === exId);
       if (ex) return ex;
     }
@@ -142,10 +150,11 @@
   }
 
   function nextDayId() {
+    const schedule = getSchedule();
     const latest = sortedSessions()[0];
-    if (!latest) return SCHEDULE[0].id;
-    const idx = SCHEDULE.findIndex((d) => d.id === latest.dayId);
-    return SCHEDULE[(idx + 1) % SCHEDULE.length].id;
+    if (!latest) return schedule[0].id;
+    const idx = schedule.findIndex((d) => d.id === latest.dayId);
+    return schedule[(idx + 1) % schedule.length].id;
   }
 
   function setsSummary(sets, unit) {
@@ -217,7 +226,7 @@
       </section>
       <div class="section-title">Your split</div>`;
 
-    app.innerHTML = hero + SCHEDULE.map((day, idx) => {
+    app.innerHTML = hero + getSchedule().map((day, idx) => {
       const last = lastDoneDate(day.id);
       const isNext = day.id === next;
       return `
@@ -293,22 +302,21 @@
     setDrafts(drafts);
   }
 
-  function setRowHtml(exId, i, set, unit) {
+  function setRowHtml(exId, i, set, prev) {
     return `
       <div class="set-row ${set.done ? "done" : ""}" data-ex="${exId}" data-i="${i}">
         <div class="set-num">${i + 1}</div>
-        <label>
-          <input type="number" inputmode="decimal" step="any" min="0" data-field="weight"
-                 value="${set.weight === "" ? "" : esc(set.weight)}" placeholder="0" aria-label="Weight">
-          <span>${unit}</span>
-        </label>
-        <label>
-          <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" data-field="reps"
-                 value="${set.reps === "" ? "" : esc(set.reps)}" placeholder="0" aria-label="Reps">
-          <span>reps</span>
-        </label>
+        <div class="set-prev">${prev ? `${fmtNum(prev.weight)} &times; ${prev.reps}` : "&ndash;"}</div>
+        <input type="number" inputmode="decimal" step="any" min="0" data-field="weight"
+               value="${set.weight === "" ? "" : esc(set.weight)}" placeholder="0" aria-label="Weight">
+        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" data-field="reps"
+               value="${set.reps === "" ? "" : esc(set.reps)}" placeholder="0" aria-label="Reps">
         <button class="check" data-action="toggle" aria-label="Mark set done">&#10003;</button>
       </div>`;
+  }
+
+  function setRowsHtml(exId, sets, last) {
+    return sets.map((s, i) => setRowHtml(exId, i, s, last && last.sets[i])).join("");
   }
 
   function renderDay(dayId) {
@@ -322,16 +330,25 @@
 
     const isComplete = (exId) => draft.entries[exId].sets.every((s) => s.done);
 
-    app.innerHTML = day.exercises.map((ex, idx) => {
-      const last = lastEntry(ex.id);
+    const lastByEx = {};
+    for (const ex of day.exercises) lastByEx[ex.id] = lastEntry(ex.id);
+
+    const tools = `
+      <div class="day-tools">
+        <button class="link-btn" data-edit="${day.id}">&#9998; Edit exercises</button>
+      </div>
+      ${day.exercises.length ? "" : '<div class="card empty">No exercises in this day yet. Tap Edit exercises to add some.</div>'}`;
+
+    app.innerHTML = tools + day.exercises.map((ex, idx) => {
+      const last = lastByEx[ex.id];
       const sets = draft.entries[ex.id].sets;
       return `
         <section class="card ex-card ${isComplete(ex.id) ? "complete" : ""}" data-exercise="${ex.id}">
           <div class="ex-head">
-            <div>
-              <div class="ex-index">${String(idx + 1).padStart(2, "0")} / ${String(day.exercises.length).padStart(2, "0")}</div>
+            <div class="ex-info">
+              <div class="ex-index">${idx + 1} of ${day.exercises.length}</div>
               <h2 class="ex-name">${esc(ex.name)}</h2>
-              <div class="ex-target">Target: <b>${ex.reps.join(" / ")}</b></div>
+              <div class="ex-target">Target ${ex.reps.join(" &middot; ")}${last ? ` <span class="dot">&bull;</span> Last ${fmtDate(last.date)}` : ""}</div>
               ${ex.note ? `<div class="ex-note">${esc(ex.note)}</div>` : ""}
             </div>
             <div class="ex-actions">
@@ -339,13 +356,13 @@
               <button class="link-btn" data-history="${ex.id}">History</button>
             </div>
           </div>
-          <div class="ex-last">${last
-            ? `Last (${fmtDate(last.date)}): <b>${esc(setsSummary(last.sets, unit))}</b>`
-            : "No previous record"}</div>
-          <div class="sets">${sets.map((s, i) => setRowHtml(ex.id, i, s, unit)).join("")}</div>
+          <div class="set-head">
+            <span>Set</span><span>Previous</span><span>${unit}</span><span>Reps</span><span>&#10003;</span>
+          </div>
+          <div class="sets">${setRowsHtml(ex.id, sets, last)}</div>
           <div class="set-actions">
-            <button class="link-btn" data-action="add-set" data-ex="${ex.id}">+ Add set</button>
-            <button class="link-btn" data-action="remove-set" data-ex="${ex.id}">- Remove set</button>
+            <button class="link-btn ghost" data-action="add-set" data-ex="${ex.id}">+ Add set</button>
+            <button class="link-btn ghost" data-action="remove-set" data-ex="${ex.id}">&minus; Remove set</button>
           </div>
         </section>`;
     }).join("") + `
@@ -370,7 +387,7 @@
         const card = app.querySelector(`[data-exercise="${ex.id}"]`);
         if (card) card.classList.toggle("complete", isComplete(ex.id));
       }
-      finishBtn.textContent = `Finish \u00b7 ${done}/${total} sets`;
+      finishBtn.textContent = `Finish workout \u00b7 ${done}/${total} sets`;
       progressFill.style.width = total ? (done / total) * 100 + "%" : "0%";
     }
     updateProgress();
@@ -404,6 +421,11 @@
         location.hash = "#/ex/" + histBtn.dataset.history;
         return;
       }
+      const editBtn = e.target.closest("[data-edit]");
+      if (editBtn) {
+        location.hash = "#/edit/" + editBtn.dataset.edit;
+        return;
+      }
       const btn = e.target.closest("[data-action]");
       if (!btn) return;
       const action = btn.dataset.action;
@@ -429,7 +451,7 @@
       }
       persistDraft(draft);
       const container = app.querySelector(`[data-exercise="${exId}"] .sets`);
-      container.innerHTML = sets.map((s, i) => setRowHtml(exId, i, s, unit)).join("");
+      container.innerHTML = setRowsHtml(exId, sets, lastByEx[exId]);
       updateProgress();
     }
 
@@ -473,13 +495,152 @@
     location.hash = "#/";
   }
 
+  // ---------- Edit exercises ----------
+
+  function parseReps(text) {
+    const parts = String(text).split(/[\s,]+/).filter(Boolean);
+    if (parts.length < 1 || parts.length > 10) return null;
+    const reps = parts.map(Number);
+    return reps.every((n) => Number.isInteger(n) && n >= 1 && n <= 100) ? reps : null;
+  }
+
+  function renderEdit(dayId, from) {
+    const schedule = getSchedule();
+    const day = schedule.find((d) => d.id === dayId);
+    if (!day) { location.hash = "#/"; return; }
+    const backHash = from === "settings" ? "#/settings" : "#/day/" + day.id;
+    const original = {};
+    for (const ex of day.exercises) original[ex.id] = ex;
+
+    // Working copy; reps stay as text so partial typing like "12, 1" isn't lost.
+    let rows = day.exercises.map((ex) => ({ id: ex.id, name: ex.name, repsText: ex.reps.join(", ") }));
+    const startJson = JSON.stringify(rows);
+
+    setHeader("Edit " + day.focus, backHash);
+    backBtn.onclick = () => {
+      if (JSON.stringify(rows) !== startJson && !confirm("Discard your changes?")) return;
+      location.hash = backHash;
+    };
+
+    function rowHtml(r, i) {
+      return `
+        <section class="card edit-card" data-i="${i}">
+          <div class="edit-top">
+            <span class="ex-index">${i + 1}</span>
+            <input class="edit-input" type="text" data-field="name" value="${esc(r.name)}"
+                   placeholder="Exercise name" aria-label="Exercise name" autocomplete="off">
+          </div>
+          <div class="edit-bottom">
+            <label class="edit-reps">
+              <span>Target reps</span>
+              <input class="edit-input" type="text" data-field="repsText" value="${esc(r.repsText)}"
+                     placeholder="12, 10, 10, 8" aria-label="Target reps per set" autocomplete="off">
+            </label>
+            <div class="edit-tools">
+              <button class="icon-btn small" data-action="up" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#8593;</button>
+              <button class="icon-btn small" data-action="down" aria-label="Move down" ${i === rows.length - 1 ? "disabled" : ""}>&#8595;</button>
+              <button class="icon-btn small danger" data-action="delete" aria-label="Delete exercise">&#10005;</button>
+            </div>
+          </div>
+        </section>`;
+    }
+
+    function renderRows() {
+      app.innerHTML = `
+        <p class="small edit-help">Separate target reps with commas. The number of values sets how many sets you do.</p>
+        ${rows.length ? rows.map(rowHtml).join("") : '<div class="card empty">No exercises yet.</div>'}
+        <button class="btn secondary" data-action="add">+ Add exercise</button>`;
+    }
+
+    renderRows();
+    setBottomBar('<button class="btn" id="saveBtn">Save exercises</button>')
+      .querySelector("#saveBtn").addEventListener("click", saveEdits);
+
+    function onInput(e) {
+      const input = e.target;
+      const card = input.closest(".edit-card");
+      if (!card || !input.dataset.field) return;
+      rows[Number(card.dataset.i)][input.dataset.field] = input.value;
+      input.classList.remove("invalid");
+    }
+
+    function onClick(e) {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      if (action === "add") {
+        rows.push({ id: null, name: "", repsText: "12, 12, 12, 12" });
+        renderRows();
+        const inputs = app.querySelectorAll('[data-field="name"]');
+        inputs[inputs.length - 1].focus();
+        return;
+      }
+      const i = Number(btn.closest(".edit-card").dataset.i);
+      if (action === "up" && i > 0) {
+        [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+      } else if (action === "down" && i < rows.length - 1) {
+        [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]];
+      } else if (action === "delete") {
+        const label = rows[i].name.trim() || "this exercise";
+        if (!confirm(`Delete ${label}? Its past history stays saved.`)) return;
+        rows.splice(i, 1);
+      } else {
+        return;
+      }
+      renderRows();
+    }
+
+    function saveEdits() {
+      let firstBad = null;
+      const exercises = rows.map((r, i) => {
+        const card = app.querySelector(`.edit-card[data-i="${i}"]`);
+        const name = r.name.trim();
+        const reps = parseReps(r.repsText);
+        if (!name) {
+          const el = card.querySelector('[data-field="name"]');
+          el.classList.add("invalid");
+          firstBad = firstBad || el;
+        }
+        if (!reps) {
+          const el = card.querySelector('[data-field="repsText"]');
+          el.classList.add("invalid");
+          firstBad = firstBad || el;
+        }
+        const prev = r.id ? original[r.id] : null;
+        const ex = prev ? Object.assign({}, prev) : { id: "custom-" + uid() };
+        ex.name = name;
+        ex.reps = reps;
+        if (prev && prev.name !== name) delete ex.search;
+        return ex;
+      });
+
+      if (firstBad) {
+        firstBad.focus();
+        alert("Every exercise needs a name, and target reps must be 1 to 10 whole numbers between 1 and 100.");
+        return;
+      }
+
+      day.exercises = exercises;
+      setSchedule(schedule);
+      toast("Exercises saved");
+      location.hash = backHash;
+    }
+
+    app.addEventListener("input", onInput);
+    app.addEventListener("click", onClick);
+    cleanupDay = () => {
+      app.removeEventListener("input", onInput);
+      app.removeEventListener("click", onClick);
+    };
+  }
+
   // ---------- Exercise history ----------
 
   function renderExercise(exId) {
     const ex = findExercise(exId);
     if (!ex) { location.hash = "#/"; return; }
     const unit = getSettings().unit;
-    const back = SCHEDULE.find((d) => d.exercises.some((e) => e.id === exId));
+    const back = getSchedule().find((d) => d.exercises.some((e) => e.id === exId));
     const backHash = sessionStorage.getItem("wt.lastDay")
       ? "#/day/" + sessionStorage.getItem("wt.lastDay")
       : "#/day/" + back.id;
@@ -646,6 +807,7 @@
   function renderSettings() {
     const settings = getSettings();
     const data = getData();
+    const customised = !!load(KEYS.schedule, null);
     setHeader("Settings", "#/");
     setBottomBar(null);
 
@@ -656,6 +818,19 @@
           <button data-unit="kg" class="${settings.unit === "kg" ? "active" : ""}">kg</button>
           <button data-unit="lb" class="${settings.unit === "lb" ? "active" : ""}">lb</button>
         </div>
+      </div>
+
+      <div class="section-title">Routine</div>
+      <div class="card routine-list">
+        ${getSchedule().map((day) => `
+          <div class="routine-row">
+            <div>
+              <div class="routine-name">${esc(day.focus)}</div>
+              <div class="small">${esc(day.name)} &middot; ${day.exercises.length} exercises</div>
+            </div>
+            <button class="link-btn" data-edit-day="${day.id}">Edit</button>
+          </div>`).join("")}
+        ${customised ? '<button class="btn secondary" id="resetRoutineBtn">Reset to default routine</button>' : ""}
       </div>
 
       <div class="section-title">Backup</div>
@@ -682,6 +857,20 @@
       });
     });
 
+    app.querySelectorAll("[data-edit-day]").forEach((btn) => {
+      btn.addEventListener("click", () => { location.hash = "#/edit/" + btn.dataset.editDay + "/settings"; });
+    });
+
+    const resetBtn = document.getElementById("resetRoutineBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        if (!confirm("Reset all days to the default exercises? Your workout history stays saved.")) return;
+        localStorage.removeItem(KEYS.schedule);
+        toast("Routine reset");
+        renderSettings();
+      });
+    }
+
     document.getElementById("exportBtn").addEventListener("click", exportData);
     const fileInput = document.getElementById("importFile");
     document.getElementById("importBtn").addEventListener("click", () => fileInput.click());
@@ -705,6 +894,7 @@
       app: "workout-tracker",
       exportedAt: new Date().toISOString(),
       settings: getSettings(),
+      schedule: load(KEYS.schedule, null),
       data: getData(),
     };
     const json = JSON.stringify(payload, null, 2);
@@ -753,6 +943,15 @@
       const added = valid.filter((s) => !existing.has(s.id));
       data.sessions.push(...added);
       setData(data);
+
+      const routine = parsed.schedule;
+      const routineOk = Array.isArray(routine) && routine.length &&
+        routine.every((d) => d && d.id && Array.isArray(d.exercises) &&
+          d.exercises.every((ex) => ex && ex.id && ex.name && Array.isArray(ex.reps) && ex.reps.length));
+      if (routineOk && confirm("Also restore the routine (exercise list) from this backup?")) {
+        setSchedule(routine);
+      }
+
       toast(`Imported ${added.length} workouts`);
       renderSettings();
     };
@@ -765,13 +964,15 @@
     if (cleanupDay) { cleanupDay(); cleanupDay = null; }
     window.scrollTo(0, 0);
     const parts = (location.hash || "#/").slice(2).split("/");
-    const [view, id] = parts;
+    const [view, id, from] = parts;
 
     if (view === "day" && id) {
       sessionStorage.setItem("wt.lastDay", id);
       renderDay(id);
     } else if (view === "ex" && id) {
       renderExercise(decodeURIComponent(id));
+    } else if (view === "edit" && id) {
+      renderEdit(id, from);
     } else if (view === "settings") {
       renderSettings();
     } else {
